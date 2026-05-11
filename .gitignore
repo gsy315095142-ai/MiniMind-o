@@ -11,6 +11,10 @@ __pycache__/
 out/*.pth
 out/*.pt
 
+# transformers 格式模型
+minimind-3o/
+scripts/minimind-3o/
+
 # 外围编码器（冻结模块，下载即可）
 model/SenseVoiceSmall/
 model/siglip2-base-p32-256-ve/
