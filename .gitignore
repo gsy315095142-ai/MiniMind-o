@@ -6,3 +6,23 @@ __pycache__/
 .claude/
 .specstory/
 .env
+
+# 模型权重（从 ModelScope/HuggingFace 下载，不上传 Git）
+out/*.pth
+out/*.pt
+
+# 外围编码器（冻结模块，下载即可）
+model/SenseVoiceSmall/
+model/siglip2-base-p32-256-ve/
+model/mimi/
+model/campplus/
+
+# ffmpeg 工具
+ffmpeg*/
+*.zip
+
+# 推理输出
+output_audio/
+
+# 训练数据（大文件）
+dataset/*.parquet
