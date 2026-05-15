@@ -1,0 +1,1105 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MiniMind-O · 训练模型</title>
+<style>
+:root {
+  --bg:#1e1e20; --p1:#2a2a2e; --p2:#35353b; --p3:#40404a;
+  --bd:#55555e; --bd2:#7a7a85;
+  --fg:#ececef; --mu:#9a9aa0; --dim:#8a8a92;
+  --u:#7fc5e0; --a:#e5b57a; --danger:#d84545; --ok:#7ad88a;
+  --serif:'Georgia','Times New Roman',serif; --mono:'SF Mono',Consolas,monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%}
+body{background:var(--bg);color:var(--fg);font-family:var(--serif);font-size:.88rem;line-height:1.6}
+
+/* ===== 整体布局 ===== */
+.wrap{max-width:1100px;margin:0 auto;padding:18px 24px 60px}
+
+/* ===== 顶部 App Nav（训练/对话 跨页统一导航）===== */
+.app-nav{display:flex;align-items:center;justify-content:space-between;padding:6px 0 14px;border-bottom:1px solid var(--bd);margin-bottom:18px}
+.app-nav .brand{display:flex;align-items:baseline;gap:10px}
+.app-nav .brand h1{font-size:1.15rem;font-weight:700;font-style:italic;color:#fff}
+.app-nav .brand .sub{font-size:.7rem;color:var(--mu);font-style:italic}
+.app-nav .tabs{display:flex;gap:4px}
+.app-nav .tab{padding:6px 16px;font-size:.78rem;font-family:var(--serif);font-style:italic;color:var(--mu);background:transparent;border:1px solid var(--bd);text-decoration:none;cursor:pointer;transition:all .15s}
+.app-nav .tab:hover{color:var(--fg);border-color:var(--bd2)}
+.app-nav .tab.on{color:#1a1a1e;background:var(--fg);border-color:var(--fg)}
+
+/* ===== Step Indicator ===== */
+.steps{display:flex;gap:0;margin-bottom:22px}
+.step{flex:1;display:flex;align-items:center;gap:10px;padding:14px 18px;background:var(--p1);border:1px solid var(--bd);border-right:none;cursor:pointer;transition:all .15s;position:relative}
+.step:last-child{border-right:1px solid var(--bd)}
+.step:hover{background:var(--p2)}
+.step .num{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:.78rem;background:var(--p3);color:var(--mu);flex-shrink:0;border:1px solid var(--bd);font-weight:600}
+.step .name{font-size:.85rem;font-style:italic}
+.step .desc{font-size:.68rem;color:var(--mu);font-style:italic;display:block}
+.step.on{background:var(--p2);border-color:var(--fg)}
+.step.on .num{background:var(--fg);color:#1a1a1e;border-color:var(--fg)}
+.step.done .num{background:var(--ok);color:#1a1a1e;border-color:var(--ok)}
+.step.done .num::after{content:''}
+.step-arrow{flex:0 0 0;width:0;border:0;align-self:center}
+
+/* ===== Panel ===== */
+.panel{display:none}
+.panel.on{display:block}
+.card{background:var(--p1);border:1px solid var(--bd);padding:22px 26px;margin-bottom:16px}
+.card h2{font-size:1rem;font-weight:700;margin-bottom:6px;font-style:italic;color:#fff}
+.card .card-sub{font-size:.72rem;color:var(--mu);font-style:italic;margin-bottom:18px}
+
+/* ===== Form ===== */
+.form-row{display:flex;gap:14px;margin-bottom:12px;align-items:flex-start;flex-wrap:wrap}
+.form-group{display:flex;flex-direction:column;gap:5px;min-width:140px;flex:1}
+.form-group label{font-size:.72rem;color:var(--mu);font-style:italic}
+.form-group .lbl-extra{color:var(--dim);font-size:.66rem}
+.form-group select,
+.form-group input[type="text"],
+.form-group input[type="number"]{padding:9px 11px;font-size:.84rem;background:var(--p2);border:1px solid var(--bd);color:var(--fg);font-family:var(--mono);outline:none}
+.form-group select:focus,
+.form-group input:focus{border-color:var(--bd2)}
+
+textarea{width:100%;min-height:180px;padding:12px;font-size:.8rem;line-height:1.55;background:var(--p2);border:1px solid var(--bd);color:var(--fg);font-family:var(--mono);outline:none;resize:vertical}
+textarea:focus{border-color:var(--bd2)}
+textarea.small{min-height:54px}
+.hint{font-size:.7rem;color:var(--mu);font-style:italic;margin-top:6px}
+
+/* ===== Buttons ===== */
+.btn{padding:8px 16px;font-size:.78rem;cursor:pointer;background:var(--p2);border:1px solid var(--bd);color:var(--fg);font-family:var(--serif);font-style:italic;display:inline-flex;align-items:center;gap:6px;transition:all .12s}
+.btn:hover:not(:disabled){background:var(--p3);border-color:var(--bd2)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn.primary{background:var(--fg);color:#1a1a1e;border-color:var(--fg);font-weight:600}
+.btn.primary:hover:not(:disabled){background:#fff}
+.btn.success{background:var(--ok);color:#1a1a1e;border-color:var(--ok);font-weight:600}
+.btn.success:hover:not(:disabled){background:#9be5a8}
+.btn.danger{color:var(--danger);border-color:#6a3a3a}
+.btn.danger:hover:not(:disabled){background:var(--danger);color:#fff}
+.btn.small{padding:5px 12px;font-size:.7rem}
+.btn-row{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap}
+.btn-tpl{background:var(--p2);border:1px dashed var(--bd2);padding:10px 16px;font-size:.78rem;cursor:pointer;color:var(--fg);font-family:var(--serif);font-style:italic;display:inline-flex;align-items:center;gap:8px;transition:all .15s}
+.btn-tpl:hover{background:var(--p3);border-color:var(--u);border-style:solid}
+.btn-tpl .tpl-name{font-weight:600}
+.btn-tpl .tpl-count{color:var(--mu);font-size:.7rem}
+
+/* ===== Mode switch ===== */
+.mode-switch{display:flex;gap:0;margin-bottom:14px;border:1px solid var(--bd);width:fit-content}
+.mode-switch button{padding:7px 18px;font-size:.74rem;background:transparent;border:none;color:var(--mu);cursor:pointer;font-family:var(--serif);font-style:italic;transition:all .15s}
+.mode-switch button:hover{color:var(--fg)}
+.mode-switch button.on{background:var(--fg);color:#1a1a1e}
+
+/* ===== Dialog editor (form mode) ===== */
+.row-list{display:flex;flex-direction:column;gap:14px;margin-bottom:14px}
+.dlg-row{background:var(--p2);border:1px solid var(--bd);padding:14px 16px;position:relative}
+.dlg-row .idx{position:absolute;top:8px;left:14px;font-family:var(--mono);font-size:.68rem;color:var(--mu);font-style:italic}
+.dlg-row .del{position:absolute;top:8px;right:10px;background:transparent;border:none;color:var(--mu);cursor:pointer;font-size:1rem;padding:2px 6px}
+.dlg-row .del:hover{color:var(--danger)}
+.dlg-row .role{font-size:.7rem;color:var(--mu);font-style:italic;margin:6px 0 4px;display:flex;align-items:center;gap:6px}
+.dlg-row .role.user{color:var(--u)}
+.dlg-row .role.asst{color:var(--a)}
+.dlg-row textarea{background:var(--p1)}
+.row-list.empty{padding:40px 0;text-align:center;color:var(--dim);font-style:italic;border:1px dashed var(--bd)}
+
+/* ===== Difficulty ===== */
+.diff-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-bottom:14px}
+.diff-card{background:var(--p2);border:1px solid var(--bd);padding:16px 18px;cursor:pointer;transition:all .15s;position:relative}
+.diff-card:hover{background:var(--p3)}
+.diff-card.on{border-color:var(--fg);background:var(--p3);box-shadow:0 0 0 1px var(--fg) inset}
+.diff-card .ic{font-size:1.3rem}
+.diff-card .title{font-size:.88rem;font-weight:600;font-style:italic;color:#fff;margin:6px 0 2px}
+.diff-card .recommend{position:absolute;top:8px;right:10px;font-size:.6rem;color:var(--ok);font-family:var(--mono);font-style:italic;border:1px solid var(--ok);padding:1px 6px}
+.diff-card .est{font-size:.7rem;color:var(--mu);font-style:italic}
+.diff-card .params{margin-top:8px;font-family:var(--mono);font-size:.66rem;color:var(--dim)}
+
+.advanced-toggle{margin:12px 0 0;font-size:.74rem;color:var(--mu);cursor:pointer;font-style:italic;user-select:none;display:inline-flex;align-items:center;gap:4px}
+.advanced-toggle:hover{color:var(--fg)}
+.advanced-panel{display:none;margin-top:12px;padding:14px;background:var(--p2);border:1px solid var(--bd)}
+.advanced-panel.on{display:block}
+
+/* ===== Progress bar ===== */
+.progress-card{background:var(--p1);border:1px solid var(--bd);padding:18px 22px;margin-bottom:14px;display:none}
+.progress-card.on{display:block}
+.progress-card .meta{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;font-family:var(--mono);font-size:.78rem}
+.progress-card .meta .right{color:var(--mu);font-size:.7rem;font-style:italic}
+.bar-bg{height:10px;background:var(--p3);border:1px solid var(--bd);overflow:hidden;position:relative}
+.bar-fg{height:100%;background:linear-gradient(90deg,var(--u),var(--ok));width:0;transition:width .35s ease}
+.metrics{display:flex;gap:18px;margin-top:12px;font-family:var(--mono);font-size:.74rem;flex-wrap:wrap}
+.metric .lab{color:var(--mu);font-style:italic;margin-right:4px}
+.metric .val{color:var(--fg);font-weight:600}
+.metric .val.loss-down{color:var(--ok)}
+.metric .val.loss-up{color:var(--a)}
+
+/* ===== Log box ===== */
+.log-wrap{margin-top:14px;display:none}
+.log-wrap.on{display:block}
+.log-toggle{font-size:.74rem;color:var(--mu);cursor:pointer;font-style:italic;user-select:none;display:inline-flex;align-items:center;gap:4px;margin-bottom:8px}
+.log-toggle:hover{color:var(--fg)}
+.log-box{background:#141416;border:1px solid var(--bd);padding:14px 16px;font-family:var(--mono);font-size:.72rem;line-height:1.7;color:var(--mu);min-height:160px;max-height:380px;overflow-y:auto;white-space:pre-wrap;word-break:break-all}
+.log-box .line-done{color:var(--ok)}
+.log-box .line-err{color:var(--danger)}
+.log-box .line-warn{color:var(--a)}
+.log-box .line-hint{color:var(--u);font-weight:600}
+
+/* ===== Status pill ===== */
+.pill{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;font-size:.72rem;font-family:var(--mono);background:var(--p2);border:1px solid var(--bd);color:var(--mu)}
+.pill .dot{width:6px;height:6px;border-radius:50%;background:var(--mu)}
+.pill.running{color:var(--u);border-color:#3c5966}
+.pill.running .dot{background:var(--u);box-shadow:0 0 6px var(--u);animation:pulse 1.4s infinite}
+.pill.done{color:var(--ok);border-color:#3a6a3a}
+.pill.done .dot{background:var(--ok)}
+.pill.failed{color:var(--danger);border-color:#6a3a3a}
+.pill.failed .dot{background:var(--danger)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+/* ===== Next step bar ===== */
+.next-bar{display:flex;justify-content:space-between;align-items:center;padding:16px 22px;background:var(--p1);border:1px solid var(--bd);margin-top:18px}
+.next-bar .info{font-size:.78rem;color:var(--mu);font-style:italic}
+
+/* ===== Table ===== */
+table{width:100%;border-collapse:collapse;font-size:.78rem}
+th{text-align:left;padding:8px 10px;border-bottom:1px solid var(--bd);color:var(--mu);font-style:italic;font-weight:normal}
+td{padding:8px 10px;border-bottom:1px solid var(--p2)}
+tr:hover td{background:var(--p2)}
+.badge{display:inline-block;padding:2px 8px;font-size:.65rem;font-family:var(--mono);border:1px solid}
+.badge-base{color:var(--a);border-color:var(--a)}
+.badge-sft{color:var(--u);border-color:var(--u)}
+.empty{color:var(--dim);font-style:italic;padding:30px 0;text-align:center}
+
+/* ===== Test chat ===== */
+.chat-box{background:var(--p2);border:1px solid var(--bd);padding:14px;min-height:200px;max-height:420px;overflow-y:auto;display:flex;flex-direction:column;gap:14px;margin-bottom:14px}
+.chat-empty{color:var(--dim);font-style:italic;text-align:center;padding:32px 0}
+.msg{display:flex;flex-direction:column;gap:4px;animation:fi .25s ease}
+@keyframes fi{from{opacity:0;transform:translateY(3px)}to{opacity:1}}
+.msg.user{align-items:flex-end}
+.msg .meta{font-size:.66rem;font-style:italic}
+.msg.user .meta{color:var(--u)}
+.msg.bot .meta{color:var(--a)}
+.msg .body{padding:10px 14px;background:var(--p1);border:1px solid var(--bd);max-width:80%;line-height:1.65;white-space:pre-wrap;word-break:break-word;font-size:.85rem}
+.msg.user .body{color:var(--u);border-color:#3c5966}
+.msg.bot .body{color:var(--fg)}
+.msg.loading .body{color:var(--mu);font-style:italic}
+.compose-test{display:flex;gap:8px}
+.compose-test input{flex:1;padding:10px 12px;font-size:.85rem;background:var(--p2);border:1px solid var(--bd);color:var(--fg);font-family:inherit;outline:none}
+.compose-test input:focus{border-color:var(--bd2)}
+
+/* ===== Responsive ===== */
+@media(max-width:680px){
+  .wrap{padding:12px 14px 50px}
+  .app-nav{flex-direction:column;align-items:flex-start;gap:10px}
+  .steps{flex-direction:column}
+  .step{border-right:1px solid var(--bd);border-bottom:none}
+  .step:not(:last-child){border-bottom:none}
+  .form-row{flex-direction:column;gap:10px}
+  .form-group{min-width:100%}
+  .diff-grid{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- ============ Top App Nav (训练/对话 跨页统一) ============ -->
+  <div class="app-nav">
+    <div class="brand">
+      <h1>MiniMind-O</h1>
+      <span class="sub">微型多模态大模型 · 训练 & 对话</span>
+    </div>
+    <div class="tabs">
+      <a class="tab on" href="#">▶ 训练模型</a>
+      <a class="tab" id="navInference" href="http://localhost:7860" target="_blank">💬 对话推理 ↗</a>
+    </div>
+  </div>
+
+  <!-- ============ Step Indicator ============ -->
+  <div class="steps">
+    <div class="step on" data-step="1">
+      <div class="num">1</div>
+      <div>
+        <div class="name">准备数据</div>
+        <div class="desc">写几条「问 + 答」样例</div>
+      </div>
+    </div>
+    <div class="step" data-step="2">
+      <div class="num">2</div>
+      <div>
+        <div class="name">开始训练</div>
+        <div class="desc">选数据 + 难度 → 跑</div>
+      </div>
+    </div>
+    <div class="step" data-step="3">
+      <div class="num">3</div>
+      <div>
+        <div class="name">试试效果</div>
+        <div class="desc">和你的新模型聊聊</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       Step 1：准备数据
+       ============================================================ -->
+  <div class="panel on" id="panel-1">
+    <div class="card">
+      <h2>① 准备训练数据</h2>
+      <div class="card-sub">教模型「该怎么回答用户」——多写几条「用户问什么 / 你希望它怎么回答」的例子就行</div>
+
+      <!-- 一键模板区 -->
+      <div style="margin-bottom:18px">
+        <div style="font-size:.74rem;color:var(--mu);font-style:italic;margin-bottom:8px">不知道怎么开始？试试这些一键模板：</div>
+        <div id="templateBar" style="display:flex;gap:10px;flex-wrap:wrap"></div>
+      </div>
+
+      <!-- 已有数据集 / 命名 -->
+      <div class="form-row">
+        <div class="form-group" style="flex:2">
+          <label>加载已有数据集</label>
+          <select id="loadDataSel"><option value="">— 选择一个数据集 —</option></select>
+        </div>
+        <div style="display:flex;gap:8px;align-items:flex-end">
+          <button class="btn small" id="btnLoad">📂 加载</button>
+          <button class="btn small" id="btnNewBlank">✨ 全新空白</button>
+        </div>
+      </div>
+
+      <!-- 模式切换 -->
+      <div class="mode-switch" style="margin-top:14px">
+        <button id="modeSimple" class="on">简单模式（推荐）</button>
+        <button id="modeExpert">专家模式（JSON）</button>
+      </div>
+
+      <!-- 简单模式：表单式 Q&A 编辑 -->
+      <div id="editorSimple">
+        <div class="row-list" id="rowList"></div>
+        <button class="btn" id="btnAddRow">+ 添加一条对话样本</button>
+        <div class="hint">小贴士：每一条「用户问 + 你希望它怎么答」就是一个训练样例。一般至少 10 条以上，越多越像。</div>
+      </div>
+
+      <!-- 专家模式：原始 JSON -->
+      <div id="editorExpert" style="display:none">
+        <textarea id="dataEditor" placeholder='[
+  {
+    "messages": [
+      {"role": "user", "content": "帮我写一篇小红书文案"},
+      {"role": "assistant", "content": "📍标题｜正文内容…"}
+    ]
+  }
+]'></textarea>
+        <div class="hint">标准 chat format JSON 数组，每条包含 messages（user + assistant）。</div>
+      </div>
+
+      <!-- 保存 -->
+      <div class="form-row" style="margin-top:16px">
+        <div class="form-group" style="max-width:320px">
+          <label>保存为数据集</label>
+          <input type="text" id="dataFilename" value="my_xhs.json" placeholder="my_data.json">
+        </div>
+        <div style="display:flex;gap:8px;align-items:flex-end">
+          <button class="btn primary" id="btnSaveData">💾 保存</button>
+          <button class="btn small" id="btnValidate">⚠ 验证格式</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="next-bar">
+      <div class="info" id="dataSummary">还没保存数据集…</div>
+      <button class="btn primary" id="btnGotoStep2">下一步：开始训练 →</button>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       Step 2：开始训练
+       ============================================================ -->
+  <div class="panel" id="panel-2">
+    <div class="card">
+      <h2>② 开始训练</h2>
+      <div class="card-sub">选好数据 + 难度档位，点击「开始训练」，喝杯咖啡等模型出炉</div>
+
+      <div class="form-row">
+        <div class="form-group" style="flex:2">
+          <label>训练数据集</label>
+          <select id="datasetSel"><option value="">— 请先在第 ① 步准备数据 —</option></select>
+        </div>
+        <div class="form-group">
+          <label>基础模型 <span class="lbl-extra">(从哪个权重开始)</span></label>
+          <select id="baseModelSel"></select>
+        </div>
+        <div class="form-group">
+          <label>给新模型起个名字</label>
+          <input type="text" id="saveName" value="my_xhs_v1" placeholder="如 xhs_v1">
+        </div>
+      </div>
+
+      <!-- 难度档位 -->
+      <div style="margin-top:18px">
+        <div style="font-size:.78rem;font-style:italic;color:var(--mu);margin-bottom:10px">训练强度</div>
+        <div class="diff-grid">
+          <div class="diff-card" data-level="quick">
+            <div class="ic">🚀</div>
+            <div class="title">快速试水</div>
+            <div class="est">约 1~3 分钟 · 看看是不是这个味儿</div>
+            <div class="params">epoch=1 · batch=2 · lr=2e-5</div>
+          </div>
+          <div class="diff-card on" data-level="normal">
+            <div class="recommend">推荐</div>
+            <div class="ic">🎯</div>
+            <div class="title">正常训练</div>
+            <div class="est">约 5~15 分钟 · 平衡效果与时间</div>
+            <div class="params">epoch=3 · batch=2 · lr=2e-5</div>
+          </div>
+          <div class="diff-card" data-level="deep">
+            <div class="ic">💪</div>
+            <div class="title">深度训练</div>
+            <div class="est">约 20~40 分钟 · 学得更像</div>
+            <div class="params">epoch=8 · batch=2 · lr=1e-5</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 高级参数 -->
+      <div>
+        <span class="advanced-toggle" id="advToggle">▸ 高级参数（点击展开）</span>
+        <div class="advanced-panel" id="advPanel">
+          <div class="form-row">
+            <div class="form-group">
+              <label>Epochs（训练轮数）</label>
+              <input type="number" id="epochs" value="3" min="1" max="50" step="1">
+            </div>
+            <div class="form-group">
+              <label>Batch Size（批大小）</label>
+              <select id="batchSize">
+                <option value="1">1</option>
+                <option value="2" selected>2</option>
+                <option value="4">4</option>
+                <option value="8">8</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Learning Rate（学习率）</label>
+              <input type="text" id="lr" value="2e-5">
+            </div>
+          </div>
+          <div class="hint">动了高级参数后，下面的「难度档位」会失效，按你填的来。</div>
+        </div>
+      </div>
+
+      <!-- 启动按钮 -->
+      <div class="btn-row" style="margin-top:18px">
+        <button class="btn primary" id="btnStart">🚀 开始训练</button>
+        <button class="btn danger" id="btnStop" disabled>⏹ 停止训练</button>
+        <span class="pill" id="globalStatus"><span class="dot"></span><span id="globalText">空闲</span></span>
+        <span id="trainInfo" style="font-size:.74rem;color:var(--mu);font-style:italic"></span>
+      </div>
+    </div>
+
+    <!-- 进度条 -->
+    <div class="progress-card" id="progressCard">
+      <div class="meta">
+        <span><b id="progPct">0%</b> · <span id="progStage">准备中…</span></span>
+        <span class="right" id="progEta">预计…</span>
+      </div>
+      <div class="bar-bg"><div class="bar-fg" id="progBar"></div></div>
+      <div class="metrics">
+        <div class="metric"><span class="lab">当前 Epoch</span><span class="val" id="mEpoch">—</span></div>
+        <div class="metric"><span class="lab">Step</span><span class="val" id="mStep">—</span></div>
+        <div class="metric"><span class="lab">Loss</span><span class="val" id="mLoss">—</span></div>
+        <div class="metric"><span class="lab">已用时</span><span class="val" id="mElapsed">0s</span></div>
+      </div>
+
+      <div class="log-wrap" id="logWrap">
+        <div class="log-toggle" id="logToggle">▸ 详细日志</div>
+        <div class="log-box" id="logBox" style="display:none"></div>
+      </div>
+    </div>
+
+    <div class="next-bar">
+      <div class="info" id="trainSummary">完成训练后会自动进入下一步…</div>
+      <button class="btn primary" id="btnGotoStep3" disabled>下一步：试试效果 →</button>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       Step 3：试试效果（内联测试 + 模型管理）
+       ============================================================ -->
+  <div class="panel" id="panel-3">
+    <div class="card">
+      <h2>③ 试试效果</h2>
+      <div class="card-sub">直接和你刚训出来的模型聊一句，看看是不是想要的味儿</div>
+
+      <div class="form-row">
+        <div class="form-group" style="flex:2">
+          <label>测试模型</label>
+          <select id="testModelSel"></select>
+        </div>
+        <div style="display:flex;gap:8px;align-items:flex-end">
+          <button class="btn small" id="btnRefreshModels">🔄 刷新列表</button>
+          <a class="btn small" id="btnFullChat" href="http://localhost:7860" target="_blank">在完整对话页测试 ↗</a>
+        </div>
+      </div>
+
+      <div class="chat-box" id="testChat">
+        <div class="chat-empty">想到什么直接问就行 ↓ 比如「帮我写一篇咖啡店探店」</div>
+      </div>
+
+      <div class="compose-test">
+        <input type="text" id="testInput" placeholder="输入想问的内容，按回车发送" />
+        <button class="btn primary" id="btnSendTest">发送</button>
+        <button class="btn small" id="btnClearTest">清空</button>
+      </div>
+      <div class="hint">提示：第一次提问会加载模型，可能需要等 10~30 秒；之后再问就快了。</div>
+    </div>
+
+    <!-- 模型列表 -->
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <h2 style="margin:0">📦 已有模型</h2>
+        <button class="btn small" id="btnRefreshModels2">🔄 刷新</button>
+      </div>
+      <div id="modelsTable"></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+/* ============================================================
+ * 通用工具
+ * ============================================================ */
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function fmtTime(sec){
+  sec = Math.max(0, Math.round(sec));
+  if (sec < 60) return sec + 's';
+  const m = Math.floor(sec/60), s = sec%60;
+  return m + 'm ' + s + 's';
+}
+
+/* ============================================================
+ * Step 切换
+ * ============================================================ */
+let currentStep = 1;
+const stepDone = {1:false, 2:false, 3:false};
+function gotoStep(n) {
+  currentStep = n;
+  document.querySelectorAll('.step').forEach(s => {
+    const idx = parseInt(s.dataset.step);
+    s.classList.toggle('on', idx === n);
+    s.classList.toggle('done', stepDone[idx] && idx !== n);
+  });
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('on'));
+  $('panel-' + n).classList.add('on');
+  // 进入对应 step 时刷新一下相关数据
+  if (n === 2) { loadDatasets(); loadBaseModels(); }
+  if (n === 3) { loadTestModels(); loadModelsTable(); }
+}
+document.querySelectorAll('.step').forEach(s => {
+  s.onclick = () => gotoStep(parseInt(s.dataset.step));
+});
+$('btnGotoStep2').onclick = () => gotoStep(2);
+$('btnGotoStep3').onclick = () => gotoStep(3);
+
+/* ============================================================
+ * Step 1：数据准备
+ * ============================================================ */
+// ---- 一键模板 ----
+async function loadTemplates() {
+  try {
+    const d = await fetch('/api/templates').then(r => r.json());
+    const bar = $('templateBar');
+    bar.innerHTML = '';
+    for (const t of d.templates || []) {
+      const btn = document.createElement('button');
+      btn.className = 'btn-tpl';
+      btn.disabled = !t.available;
+      btn.innerHTML = `<span class="tpl-name">${escapeHtml(t.name)}</span>
+                       <span class="tpl-count">${t.available ? `${t.count} 条示例` : '（缺失）'}</span>`;
+      btn.onclick = () => loadTemplateById(t.id, t.file);
+      bar.appendChild(btn);
+    }
+  } catch (e) {
+    $('templateBar').innerHTML = '<span style="color:var(--mu);font-size:.7rem;font-style:italic">模板加载失败</span>';
+  }
+}
+async function loadTemplateById(id, file) {
+  try {
+    const d = await fetch('/api/load_template?id=' + encodeURIComponent(id)).then(r => r.json());
+    if (d.error) { alert(d.error); return; }
+    $('dataEditor').value = d.content;
+    $('dataFilename').value = 'my_' + file;
+    importJsonToRows(d.content);
+    refreshDataSummary();
+    alert(`✅ 已加载模板「${d.name}」，可以在下面看到样例并按需修改。`);
+  } catch (e) { alert('加载失败：' + e.message); }
+}
+
+// ---- 已有数据集下拉 ----
+async function loadDataList() {
+  const d = await fetch('/api/datasets').then(r => r.json());
+  const sel = $('loadDataSel');
+  sel.innerHTML = '<option value="">— 选择一个数据集 —</option>';
+  for (const ds of d.datasets || []) {
+    const opt = document.createElement('option');
+    opt.value = ds.name;
+    opt.textContent = `${ds.name}  (${ds.count} 条, ${(ds.size/1024).toFixed(1)}KB)`;
+    sel.appendChild(opt);
+  }
+}
+$('btnLoad').onclick = async () => {
+  const name = $('loadDataSel').value;
+  if (!name) { alert('请先选择一个已有数据集'); return; }
+  const d = await fetch('/api/load_data?name=' + encodeURIComponent(name)).then(r => r.json());
+  if (d.error) { alert(d.error); return; }
+  $('dataEditor').value = d.content;
+  $('dataFilename').value = d.name;
+  importJsonToRows(d.content);
+  refreshDataSummary();
+};
+$('btnNewBlank').onclick = () => {
+  if (rows.length && !confirm('当前编辑器有内容，确认清空重来？')) return;
+  rows = [];
+  renderRows();
+  $('dataEditor').value = '';
+  refreshDataSummary();
+};
+
+// ---- 简单 / 专家模式 ----
+let editMode = 'simple';
+$('modeSimple').onclick = () => switchMode('simple');
+$('modeExpert').onclick = () => switchMode('expert');
+function switchMode(m) {
+  if (m === editMode) return;
+  if (m === 'expert') {
+    // simple → expert：把行同步到 textarea
+    $('dataEditor').value = JSON.stringify(rowsToJson(), null, 2);
+  } else {
+    // expert → simple：解析 textarea
+    try { importJsonToRows($('dataEditor').value); }
+    catch (e) { if (!confirm('当前 JSON 解析失败，切换会丢失内容，继续？')) return; }
+  }
+  editMode = m;
+  $('modeSimple').classList.toggle('on', m === 'simple');
+  $('modeExpert').classList.toggle('on', m === 'expert');
+  $('editorSimple').style.display = m === 'simple' ? '' : 'none';
+  $('editorExpert').style.display = m === 'expert' ? '' : 'none';
+}
+
+// ---- 表单式 Q&A 编辑 ----
+let rows = [];  // [{user, assistant}, ...]
+function renderRows() {
+  const box = $('rowList');
+  if (!rows.length) {
+    box.innerHTML = '<div style="padding:30px 0;text-align:center;color:var(--dim);font-style:italic">还没有样本，点下方「+ 添加一条」开始吧</div>';
+    return;
+  }
+  box.innerHTML = '';
+  rows.forEach((r, i) => {
+    const div = document.createElement('div');
+    div.className = 'dlg-row';
+    div.innerHTML = `
+      <span class="idx">第 ${i+1} 条</span>
+      <button class="del" title="删除这一条">×</button>
+      <div class="role user">👤 用户问：</div>
+      <textarea class="small q" placeholder="比如：帮我写一篇关于杭州咖啡馆的小红书探店"></textarea>
+      <div class="role asst">🤖 你希望它怎么答：</div>
+      <textarea class="a" placeholder="比如：📍杭州｜藏在巷子里的宝藏咖啡馆☕️…"></textarea>
+    `;
+    const [qTa, aTa] = div.querySelectorAll('textarea');
+    qTa.value = r.user || '';
+    aTa.value = r.assistant || '';
+    qTa.oninput = () => { rows[i].user = qTa.value; refreshDataSummary(); };
+    aTa.oninput = () => { rows[i].assistant = aTa.value; refreshDataSummary(); };
+    div.querySelector('.del').onclick = () => {
+      rows.splice(i, 1);
+      renderRows();
+      refreshDataSummary();
+    };
+    box.appendChild(div);
+  });
+}
+$('btnAddRow').onclick = () => {
+  rows.push({user: '', assistant: ''});
+  renderRows();
+  refreshDataSummary();
+  // 滚到最后一条
+  setTimeout(() => {
+    const ta = $('rowList').lastElementChild?.querySelector('textarea.q');
+    if (ta) ta.focus();
+  }, 50);
+};
+
+// ---- JSON 与 rows 互转 ----
+function rowsToJson() {
+  return rows
+    .filter(r => (r.user || '').trim() || (r.assistant || '').trim())
+    .map(r => ({
+      messages: [
+        {role: 'user', content: r.user || ''},
+        {role: 'assistant', content: r.assistant || ''}
+      ]
+    }));
+}
+function importJsonToRows(text) {
+  let data;
+  try { data = JSON.parse(text); } catch (e) {
+    // 解析失败，但仍要清空 rows 让用户能在简单模式下继续
+    rows = [];
+    renderRows();
+    throw e;
+  }
+  if (!Array.isArray(data)) { rows = []; renderRows(); return; }
+  rows = data.map(item => {
+    const msgs = item.messages || item.conversation || [];
+    const u = (msgs.find(m => m.role === 'user') || {}).content || '';
+    const a = (msgs.find(m => m.role === 'assistant') || {}).content || '';
+    return {user: u, assistant: a};
+  });
+  // 同步到 textarea
+  $('dataEditor').value = text;
+  renderRows();
+}
+
+// ---- 保存 / 验证 ----
+function getCurrentJsonString() {
+  return editMode === 'simple'
+    ? JSON.stringify(rowsToJson(), null, 2)
+    : $('dataEditor').value;
+}
+$('btnValidate').onclick = () => {
+  let data;
+  try { data = JSON.parse(getCurrentJsonString()); }
+  catch (e) { alert('❌ JSON 格式错误：' + e.message); return; }
+  if (!Array.isArray(data)) { alert('❌ 顶层必须是数组 []'); return; }
+  let issues = 0;
+  for (const item of data) {
+    const msgs = item.messages || item.conversation;
+    if (!msgs || !Array.isArray(msgs)) { issues++; continue; }
+    if (!msgs.some(m => m.role === 'user')) issues++;
+    else if (!msgs.some(m => m.role === 'assistant')) issues++;
+  }
+  if (issues) alert(`✅ 格式正确，共 ${data.length} 条\n⚠️ 其中 ${issues} 条可能缺少 user 或 assistant`);
+  else alert(`✅ 完美！共 ${data.length} 条训练数据，可以保存了`);
+};
+$('btnSaveData').onclick = async () => {
+  let name = $('dataFilename').value.trim();
+  if (!name) { alert('请填写文件名'); return; }
+  if (!name.endsWith('.json')) name += '.json';
+  const content = getCurrentJsonString();
+  try { const j = JSON.parse(content); if (!Array.isArray(j) || !j.length) { alert('数据为空，先添加几条样本吧'); return; } }
+  catch (e) { alert('❌ JSON 解析失败：' + e.message); return; }
+  const res = await fetch('/api/save_data', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({name, content})
+  }).then(r => r.json());
+  if (res.error) { alert(res.error); return; }
+  stepDone[1] = true;
+  document.querySelector('.step[data-step="1"]').classList.add('done');
+  alert('✅ 已保存：dataset/' + res.name);
+  await loadDataList();
+  $('loadDataSel').value = res.name;
+  refreshDataSummary(res.name);
+};
+function refreshDataSummary(savedName) {
+  const data = (() => {
+    try { return JSON.parse(getCurrentJsonString()); } catch { return null; }
+  })();
+  const count = Array.isArray(data) ? data.length : 0;
+  $('dataSummary').textContent = savedName
+    ? `✅ 已保存数据集「${savedName}」，共 ${count} 条样本`
+    : (count ? `当前编辑器有 ${count} 条样本（未保存）` : '还没保存数据集…');
+}
+
+/* ============================================================
+ * Step 2：训练
+ * ============================================================ */
+// ---- 数据集 / 基座模型下拉 ----
+async function loadDatasets() {
+  const d = await fetch('/api/datasets').then(r => r.json());
+  const sel = $('datasetSel');
+  const cur = sel.value;
+  sel.innerHTML = '';
+  if (!d.datasets || !d.datasets.length) {
+    sel.innerHTML = '<option value="">— 请先在第 ① 步准备数据 —</option>';
+    return;
+  }
+  for (const ds of d.datasets) {
+    const opt = document.createElement('option');
+    opt.value = ds.name;
+    opt.textContent = `${ds.name}  (${ds.count} 条)`;
+    sel.appendChild(opt);
+  }
+  // 优先选中刚保存的
+  const saved = $('loadDataSel').value;
+  if (saved && [...sel.options].some(o => o.value === saved)) sel.value = saved;
+  else if (cur) sel.value = cur;
+}
+async function loadBaseModels() {
+  const d = await fetch('/api/models').then(r => r.json());
+  const sel = $('baseModelSel');
+  sel.innerHTML = '';
+  for (const m of d.models || []) {
+    const opt = document.createElement('option');
+    opt.value = m.name.replace('_768.pth', '').replace('.pth', '');
+    opt.textContent = m.name + (m.is_base ? '  [基座]' : '') + `  (${m.size_mb}MB)`;
+    if (m.is_base) opt.selected = true;
+    sel.appendChild(opt);
+  }
+}
+
+// ---- 难度档位 ----
+let difficulty = 'normal';
+let advTouched = false;  // 用户是否手动改过高级参数
+const DIFF_PRESETS = {
+  quick:  {epochs: 1, batch: 2, lr: '2e-5'},
+  normal: {epochs: 3, batch: 2, lr: '2e-5'},
+  deep:   {epochs: 8, batch: 2, lr: '1e-5'},
+};
+document.querySelectorAll('.diff-card').forEach(card => {
+  card.onclick = () => {
+    document.querySelectorAll('.diff-card').forEach(c => c.classList.remove('on'));
+    card.classList.add('on');
+    difficulty = card.dataset.level;
+    advTouched = false;  // 选档位时复位
+    const p = DIFF_PRESETS[difficulty];
+    $('epochs').value = p.epochs;
+    $('batchSize').value = p.batch;
+    $('lr').value = p.lr;
+  };
+});
+// 高级参数被手动改时，记一下
+['epochs','batchSize','lr'].forEach(id => $(id).oninput = () => advTouched = true);
+
+$('advToggle').onclick = () => {
+  const panel = $('advPanel');
+  const open = panel.classList.toggle('on');
+  $('advToggle').textContent = (open ? '▾' : '▸') + ' 高级参数（' + (open ? '点击收起' : '点击展开') + '）';
+};
+
+// ---- 开始训练 ----
+let currentTaskId = null;
+let ws = null;
+let totalSteps = 0;
+let firstLoss = null;
+let trainStartTs = 0;
+let elapsedTimer = null;
+
+function setGlobalStatus(status, text) {
+  const pill = $('globalStatus');
+  pill.className = 'pill ' + (status || '');
+  $('globalText').textContent = text;
+}
+function resetProgressUI() {
+  totalSteps = 0; firstLoss = null;
+  $('progPct').textContent = '0%';
+  $('progBar').style.width = '0%';
+  $('progStage').textContent = '准备中…';
+  $('progEta').textContent = '预计…';
+  $('mEpoch').textContent = '—';
+  $('mStep').textContent = '—';
+  $('mLoss').textContent = '—';
+  $('mLoss').className = 'val';
+  $('mElapsed').textContent = '0s';
+  $('logBox').innerHTML = '';
+}
+
+$('btnStart').onclick = async () => {
+  const dataset = $('datasetSel').value;
+  const saveName = $('saveName').value.trim();
+  if (!dataset) { alert('请先选择训练数据集'); return; }
+  if (!saveName) { alert('请填写模型名称'); return; }
+
+  // 参数来源：默认走档位，但若用户改过高级参数则用高级参数
+  const params = advTouched
+    ? {epochs: parseInt($('epochs').value), batch_size: parseInt($('batchSize').value), learning_rate: $('lr').value}
+    : (() => { const p = DIFF_PRESETS[difficulty]; return {epochs: p.epochs, batch_size: p.batch, learning_rate: p.lr}; })();
+
+  $('btnStart').disabled = true;
+  $('btnStop').disabled = false;
+  $('btnGotoStep3').disabled = true;
+  $('progressCard').classList.add('on');
+  resetProgressUI();
+  setGlobalStatus('running', '训练中…');
+
+  const res = await fetch('/api/start_train', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      dataset, save_name: saveName,
+      base_model: $('baseModelSel').value,
+      ...params,
+    })
+  }).then(r => r.json());
+
+  if (res.error) {
+    alert(res.error);
+    $('btnStart').disabled = false; $('btnStop').disabled = true;
+    setGlobalStatus('failed', '启动失败');
+    return;
+  }
+
+  currentTaskId = res.task_id;
+  trainStartTs = Date.now();
+  if (elapsedTimer) clearInterval(elapsedTimer);
+  elapsedTimer = setInterval(() => {
+    $('mElapsed').textContent = fmtTime((Date.now() - trainStartTs) / 1000);
+  }, 1000);
+  $('trainInfo').textContent = `任务 ${res.task_id} · 保存为 ${saveName}`;
+  connectLogWS(res.task_id, saveName);
+};
+
+$('btnStop').onclick = async () => {
+  if (!currentTaskId) return;
+  if (!confirm('确认停止训练？已完成的 epoch 会保留下来。')) return;
+  await fetch('/api/stop_train', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({task_id: currentTaskId})
+  });
+};
+
+$('logToggle').onclick = () => {
+  const box = $('logBox');
+  const open = box.style.display === 'none';
+  box.style.display = open ? '' : 'none';
+  $('logToggle').textContent = (open ? '▾' : '▸') + ' 详细日志';
+};
+
+function appendLog(line) {
+  const box = $('logBox');
+  const span = document.createElement('span');
+  if (line.includes('✅') || line.includes('训练完毕') || line.includes('已保存')) span.className = 'line-done';
+  else if (line.includes('❌') || /\bError\b/i.test(line) || line.includes('Traceback')) span.className = 'line-err';
+  else if (line.includes('⚠️') || /\bWarning\b/.test(line)) span.className = 'line-warn';
+  else if (line.includes('💡')) span.className = 'line-hint';
+  span.textContent = line;
+  box.appendChild(span);
+  box.scrollTop = box.scrollHeight;
+}
+
+// 关键：解析训练日志，提炼进度
+function parseProgress(line) {
+  // 1. 总步数：「🚀 开始训练 | epochs=3 | batch=2 | lr=2e-5 | steps=45 | log_interval=1」
+  const m0 = line.match(/steps=(\d+)/);
+  if (m0 && !totalSteps) {
+    totalSteps = parseInt(m0[1]);
+    $('progStage').textContent = `开始训练 (共 ${totalSteps} 步)`;
+    $('logWrap').classList.add('on');
+  }
+  // 2. 步进：「Epoch [1/3] Step [12/30] loss=2.3445 avg=2.5123 lr=0.00002000 eta=1.5min」
+  const m1 = line.match(/Epoch \[(\d+)\/(\d+)\] Step \[(\d+)\/(\d+)\] loss=([\d.]+).*?eta=([\d.]+)min/);
+  if (m1) {
+    const [, ep, eps, st, sts, loss, etaMin] = m1;
+    const stepsDone = (parseInt(ep) - 1) * parseInt(sts) + parseInt(st);
+    const total = totalSteps || (parseInt(eps) * parseInt(sts));
+    const pct = Math.min(99, Math.round(stepsDone / total * 100));
+    $('progPct').textContent = pct + '%';
+    $('progBar').style.width = pct + '%';
+    $('progStage').textContent = `Epoch ${ep}/${eps} · Step ${st}/${sts}`;
+    $('progEta').textContent = `预计还剩 ${fmtTime(parseFloat(etaMin) * 60)}`;
+    $('mEpoch').textContent = `${ep} / ${eps}`;
+    $('mStep').textContent = `${st} / ${sts}`;
+    const lossF = parseFloat(loss);
+    if (firstLoss === null) firstLoss = lossF;
+    const cls = lossF < firstLoss ? 'val loss-down' : (lossF > firstLoss * 1.05 ? 'val loss-up' : 'val');
+    const arrow = lossF < firstLoss ? '↓' : (lossF > firstLoss * 1.05 ? '↑' : '·');
+    $('mLoss').className = cls;
+    $('mLoss').textContent = `${lossF.toFixed(4)} ${arrow}`;
+  }
+  // 3. Epoch 完成
+  if (line.includes('Epoch') && line.includes('完成')) {
+    $('progStage').textContent = line.replace(/^\s+/, '');
+  }
+  // 4. 训练完毕
+  if (line.includes('训练完毕') || line.includes('🏁')) {
+    $('progPct').textContent = '100%';
+    $('progBar').style.width = '100%';
+  }
+}
+
+function connectLogWS(taskId, saveName) {
+  if (ws) { try { ws.close(); } catch {} }
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${proto}://${location.host}/ws/train_log`);
+  ws.onopen = () => ws.send(JSON.stringify({task_id: taskId}));
+  ws.onmessage = (e) => {
+    const d = JSON.parse(e.data);
+    if (d.type === 'log') {
+      appendLog(d.line);
+      parseProgress(d.line);
+    } else if (d.type === 'status') {
+      if (elapsedTimer) clearInterval(elapsedTimer);
+      const map = {
+        done:    ['done',   '✅ 训练完成'],
+        failed:  ['failed', '❌ 训练失败'],
+        stopped: ['failed', '⚠️ 已停止'],
+      };
+      const [cls, txt] = map[d.status] || ['failed', d.status];
+      setGlobalStatus(cls, txt);
+      $('btnStart').disabled = false; $('btnStop').disabled = true;
+      if (d.status === 'done') {
+        stepDone[2] = true;
+        document.querySelector('.step[data-step="2"]').classList.add('done');
+        $('btnGotoStep3').disabled = false;
+        $('trainSummary').textContent = `✅ 训练完成！模型 ${saveName}_768.pth 已就绪，去第 ③ 步聊一句试试 →`;
+        $('progPct').textContent = '100%';
+        $('progBar').style.width = '100%';
+        $('progStage').textContent = '完成 🎉';
+        $('progEta').textContent = '总用时 ' + fmtTime(d.elapsed);
+        // 训完自动跳转到第 3 步
+        setTimeout(() => { if (currentStep === 2) gotoStep(3); }, 1500);
+      } else {
+        // 失败/停止时：自动展开日志面板 + 滚到底，让用户立刻看到原因
+        $('logBox').style.display = '';
+        $('logToggle').textContent = '▾ 详细日志';
+        $('logBox').scrollTop = $('logBox').scrollHeight;
+        // 尝试从日志里抓出第一行 hint（带 💡 的）作为摘要
+        const hintLine = [...$('logBox').children].map(n => n.textContent)
+          .find(s => s.includes('💡'));
+        $('trainSummary').textContent = hintLine
+          ? hintLine.trim()
+          : '训练未完成，详细日志已展开（请下滑查看具体错误）。';
+      }
+    } else if (d.type === 'error') {
+      appendLog('❌ ' + d.message + '\n');
+    }
+  };
+  ws.onclose = () => {
+    if (currentTaskId === taskId && $('btnStop').disabled === false) {
+      setTimeout(() => {
+        if (currentTaskId === taskId && $('btnStop').disabled === false) connectLogWS(taskId, saveName);
+      }, 2000);
+    }
+  };
+}
+
+/* ============================================================
+ * Step 3：测试 + 模型管理
+ * ============================================================ */
+async function loadTestModels() {
+  const d = await fetch('/api/models').then(r => r.json());
+  const sel = $('testModelSel');
+  sel.innerHTML = '';
+  // 倒序，新训出来的排前面；基座放后面
+  const list = [...(d.models || [])].sort((a, b) => {
+    if (a.is_base !== b.is_base) return a.is_base ? 1 : -1;
+    return b.time.localeCompare(a.time);
+  });
+  for (const m of list) {
+    const opt = document.createElement('option');
+    opt.value = m.name;
+    opt.textContent = m.name + (m.is_base ? '  [基座]' : '');
+    sel.appendChild(opt);
+  }
+}
+async function loadModelsTable() {
+  const d = await fetch('/api/models').then(r => r.json());
+  const box = $('modelsTable');
+  if (!d.models || !d.models.length) {
+    box.innerHTML = '<div class="empty">暂无模型文件，先去训练一个吧 🚀</div>';
+    return;
+  }
+  let html = '<table><thead><tr><th>模型名</th><th>大小</th><th>类型</th><th>时间</th><th>操作</th></tr></thead><tbody>';
+  for (const m of d.models) {
+    const badge = m.is_base
+      ? '<span class="badge badge-base">基座</span>'
+      : '<span class="badge badge-sft">SFT</span>';
+    const op = m.is_base
+      ? '<span style="color:var(--mu);font-size:.72rem;font-style:italic">受保护</span>'
+      : `<button class="btn small" onclick="selectAndTest('${m.name}')">▶ 测试</button>
+         <button class="btn small danger" onclick="deleteModel('${m.name}')">删除</button>`;
+    html += `<tr>
+      <td style="font-family:var(--mono);font-size:.75rem">${escapeHtml(m.name)}</td>
+      <td style="font-family:var(--mono)">${m.size_mb} MB</td>
+      <td>${badge}</td>
+      <td style="color:var(--mu);font-size:.72rem">${m.time}</td>
+      <td>${op}</td>
+    </tr>`;
+  }
+  html += '</tbody></table>';
+  box.innerHTML = html;
+}
+$('btnRefreshModels').onclick = loadTestModels;
+$('btnRefreshModels2').onclick = loadModelsTable;
+
+function selectAndTest(name) {
+  const sel = $('testModelSel');
+  if ([...sel.options].some(o => o.value === name)) sel.value = name;
+  $('testInput').focus();
+}
+async function deleteModel(name) {
+  if (!confirm('确认删除 ' + name + '？此操作不可恢复！')) return;
+  const res = await fetch('/api/delete_model', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({name})
+  }).then(r => r.json());
+  if (res.error) { alert(res.error); return; }
+  loadTestModels(); loadModelsTable();
+}
+
+// ---- 内联测试聊天 ----
+let testBusy = false;
+async function sendTest() {
+  if (testBusy) return;
+  const text = $('testInput').value.trim();
+  const model = $('testModelSel').value;
+  if (!text) return;
+  if (!model) { alert('请先选择一个测试模型'); return; }
+  testBusy = true; $('btnSendTest').disabled = true;
+  $('testInput').value = '';
+
+  const chat = $('testChat');
+  // 清空 empty 占位
+  chat.querySelector('.chat-empty')?.remove();
+  // 用户消息
+  chat.insertAdjacentHTML('beforeend', `<div class="msg user"><div class="meta">你</div><div class="body">${escapeHtml(text)}</div></div>`);
+  // bot 占位
+  const botId = 'bot-' + Date.now();
+  chat.insertAdjacentHTML('beforeend', `<div class="msg bot loading" id="${botId}"><div class="meta">${escapeHtml(model)}</div><div class="body">思考中…（首次加载模型可能需要 10-30 秒）</div></div>`);
+  chat.scrollTop = chat.scrollHeight;
+
+  try {
+    const res = await fetch('/api/quick_test', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({model, prompt: text})
+    }).then(r => r.json());
+    const el = document.getElementById(botId);
+    el.classList.remove('loading');
+    if (res.error) {
+      el.classList.add('msg');
+      el.querySelector('.body').textContent = '❌ ' + res.error;
+    } else {
+      el.querySelector('.body').textContent = res.response || '(空回复)';
+    }
+  } catch (e) {
+    const el = document.getElementById(botId);
+    el.classList.remove('loading');
+    el.querySelector('.body').textContent = '❌ 请求失败：' + e.message;
+  } finally {
+    testBusy = false; $('btnSendTest').disabled = false;
+    chat.scrollTop = chat.scrollHeight;
+    $('testInput').focus();
+  }
+}
+$('btnSendTest').onclick = sendTest;
+$('testInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendTest(); }
+});
+$('btnClearTest').onclick = () => {
+  $('testChat').innerHTML = '<div class="chat-empty">想到什么直接问就行 ↓</div>';
+};
+
+/* ============================================================
+ * 初始化
+ * ============================================================ */
+loadTemplates();
+loadDataList();
+renderRows();
+refreshDataSummary();
+// 预载 step 2 的下拉，方便用户直接跳过去
+loadDatasets();
+loadBaseModels();
+</script>
+</body>
+</html>
