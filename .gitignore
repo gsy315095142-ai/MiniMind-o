@@ -11,6 +11,9 @@ __pycache__/
 out/*.pth
 out/*.pt
 
+# 第三方开源模型（从 HuggingFace 下载，不上传 Git）
+models/
+
 # transformers 格式模型
 minimind-3o/
 scripts/minimind-3o/
