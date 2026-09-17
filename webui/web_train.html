@@ -112,6 +112,44 @@ textarea.small{min-height:54px}
 .diff-card .est{font-size:.7rem;color:var(--mu);font-style:italic}
 .diff-card .params{margin-top:8px;font-family:var(--mono);font-size:.66rem;color:var(--dim)}
 
+/* ===== Model Type Picker（v2：多模型支持） =====
+ * 视觉上复用 .diff-card 的尺寸/边框/选中态，只多了一个未下载/不可选状态 */
+.mt-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin-bottom:14px}
+.mt-card{background:var(--p2);border:1px solid var(--bd);padding:14px 18px;cursor:pointer;transition:all .15s;position:relative}
+.mt-card:hover:not(.disabled){background:var(--p3)}
+.mt-card.on{border-color:var(--fg);background:var(--p3);box-shadow:0 0 0 1px var(--fg) inset}
+.mt-card.disabled{cursor:not-allowed;opacity:.45}
+.mt-card .mt-head{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.mt-card .mt-ic{font-size:1.1rem}
+.mt-card .mt-title{font-size:.86rem;font-weight:600;font-style:italic;color:#fff}
+.mt-card .mt-sub{font-size:.7rem;color:var(--mu);font-style:italic;font-family:var(--mono)}
+.mt-card .mt-vram{margin-top:6px;font-size:.66rem;color:var(--dim);font-family:var(--mono)}
+.mt-card .mt-warn{margin-top:6px;font-size:.66rem;color:var(--danger);font-style:italic}
+
+/* family-conditional 显示开关：仅在选了对应 family 时显示 */
+.only-minimind{display:none}
+.only-hf_causal_lm{display:none}
+body.fm-minimind .only-minimind{display:flex}
+body.fm-hf_causal_lm .only-hf_causal_lm{display:flex}
+/* form-group 是 inline-flex(column) 的，所以 display:flex 兼容 */
+.only-minimind.form-group,
+.only-hf_causal_lm.form-group{display:none}
+body.fm-minimind .only-minimind.form-group{display:flex}
+body.fm-hf_causal_lm .only-hf_causal_lm.form-group{display:flex}
+
+/* 只读基座展示框：视觉模仿 disabled 的 input，但能多行展示路径 */
+.readonly-base{padding:9px 11px;background:var(--p3);border:1px dashed var(--bd2);color:var(--mu);font-family:var(--mono);font-size:.78rem;line-height:1.4}
+.readonly-base .name{color:var(--fg);font-weight:600}
+.readonly-base .meta{font-size:.66rem;color:var(--dim);margin-top:3px;word-break:break-all}
+.readonly-base .meta.warn{color:var(--danger)}
+/* v2.2 续训提示：选了续训起点后的彩色提示条 */
+.resume-hint{margin-top:6px;padding:7px 10px;font-size:.7rem;border-radius:3px;background:#fef9e7;border:1px solid #f9d97a;color:#7a5b00;line-height:1.5}
+.resume-hint b{font-family:var(--mono)}
+.resume-hint.empty{display:none}
+/* 续训时灰掉的 LoRA 结构参数 */
+.lora-locked{opacity:.45;pointer-events:none;position:relative}
+.lora-locked::after{content:"已被续训源固定";position:absolute;right:8px;top:50%;transform:translateY(-50%);font-size:.62rem;background:#fff3b8;color:#7a5b00;padding:2px 6px;border-radius:3px;pointer-events:none}
+
 .advanced-toggle{margin:12px 0 0;font-size:.74rem;color:var(--mu);cursor:pointer;font-style:italic;user-select:none;display:inline-flex;align-items:center;gap:4px}
 .advanced-toggle:hover{color:var(--fg)}
 .advanced-panel{display:none;margin-top:12px;padding:14px;background:var(--p2);border:1px solid var(--bd)}
@@ -164,6 +202,8 @@ tr:hover td{background:var(--p2)}
 .badge{display:inline-block;padding:2px 8px;font-size:.65rem;font-family:var(--mono);border:1px solid}
 .badge-base{color:var(--a);border-color:var(--a)}
 .badge-sft{color:var(--u);border-color:var(--u)}
+.badge-lora{color:#c79af0;border-color:#7c5a9e}    /* LoRA 适配器 */
+.badge-mt{color:var(--mu);border-color:var(--bd2);margin-left:6px;font-size:.6rem}  /* 次级 badge：模型类型 */
 .empty{color:var(--dim);font-style:italic;padding:30px 0;text-align:center}
 
 /* ===== Test chat ===== */
@@ -313,20 +353,49 @@ tr:hover td{background:var(--p2)}
   <div class="panel" id="panel-2">
     <div class="card">
       <h2>② 开始训练</h2>
-      <div class="card-sub">选好数据 + 难度档位，点击「开始训练」，喝杯咖啡等模型出炉</div>
+      <div class="card-sub">先选模型类型，再选数据 + 难度档位，点击「开始训练」，喝杯咖啡等模型出炉</div>
+
+      <!-- v2 新增：模型类型选择 -->
+      <div style="margin-bottom:18px">
+        <div style="font-size:.78rem;font-style:italic;color:var(--mu);margin-bottom:10px">选择模型类型</div>
+        <div class="mt-grid" id="modelTypeGrid">
+          <!-- JS 渲染：每张卡片对应 MODEL_REGISTRY 里的一项 -->
+        </div>
+        <div class="hint" id="modelTypeHint" style="margin-top:6px"></div>
+      </div>
 
       <div class="form-row">
         <div class="form-group" style="flex:2">
           <label>训练数据集</label>
           <select id="datasetSel"><option value="">— 请先在第 ① 步准备数据 —</option></select>
         </div>
-        <div class="form-group">
+        <!-- 「基础模型」位：MiniMind 下拉 / HF 模型只读展示
+             两个组件共享同一栏位，靠 only-* CSS 切换显隐 -->
+        <div class="form-group only-minimind">
           <label>基础模型 <span class="lbl-extra">(从哪个权重开始)</span></label>
           <select id="baseModelSel"></select>
+        </div>
+        <div class="form-group only-hf_causal_lm">
+          <label>基座模型 <span class="lbl-extra">(已固定，自动加载)</span></label>
+          <div class="readonly-base" id="hfBaseInfo">
+            <div class="name" id="hfBaseName">—</div>
+            <div class="meta" id="hfBaseMeta">—</div>
+          </div>
         </div>
         <div class="form-group">
           <label>给新模型起个名字</label>
           <input type="text" id="saveName" value="my_xhs_v1" placeholder="如 xhs_v1">
+        </div>
+      </div>
+
+      <!-- v2.2 续训起点：仅 HF LoRA 模型显示 -->
+      <div class="form-row only-hf_causal_lm">
+        <div class="form-group" style="flex:1">
+          <label>续训起点 <span class="lbl-extra">(可选：在已有 LoRA 基础上继续训练)</span></label>
+          <select id="resumeFromSel">
+            <option value="">— 从零开始训练新的 LoRA —</option>
+          </select>
+          <div class="resume-hint empty" id="resumeHint"></div>
         </div>
       </div>
 
@@ -380,6 +449,37 @@ tr:hover td{background:var(--p2)}
             </div>
           </div>
           <div class="hint">动了高级参数后，下面的「难度档位」会失效，按你填的来。</div>
+        </div>
+      </div>
+
+      <!-- v2 新增：LoRA 专属参数（仅 DeepSeek/Qwen 等 HF 模型显示） -->
+      <div class="only-hf_causal_lm" style="margin-top:8px;flex-direction:column;width:100%">
+        <span class="advanced-toggle" id="loraToggle">▸ LoRA 参数（点击展开）</span>
+        <div class="advanced-panel" id="loraPanel">
+          <div class="form-row">
+            <div class="form-group">
+              <label>LoRA Rank <span class="lbl-extra">(秩，越大越强)</span></label>
+              <select id="loraR">
+                <option value="8">8（轻量）</option>
+                <option value="16" selected>16（推荐）</option>
+                <option value="32">32（强力）</option>
+                <option value="64">64（最强，慢）</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>LoRA Alpha <span class="lbl-extra">(缩放，通常 = 2×rank)</span></label>
+              <input type="number" id="loraAlpha" value="32" min="1" max="256" step="1">
+            </div>
+            <div class="form-group">
+              <label>LoRA Dropout</label>
+              <input type="text" id="loraDropout" value="0.05">
+            </div>
+            <div class="form-group">
+              <label>Max Seq Len <span class="lbl-extra">(序列最大长度)</span></label>
+              <input type="number" id="maxSeqLen" value="1024" min="128" max="4096" step="128">
+            </div>
+          </div>
+          <div class="hint">QLoRA 默认走 4-bit 量化加载基座，显存占用约 3~4GB。如果 bitsandbytes 不可用会自动降级到 bf16（约 4~5GB）。</div>
         </div>
       </div>
 
@@ -715,6 +815,207 @@ function refreshDataSummary(savedName) {
 /* ============================================================
  * Step 2：训练
  * ============================================================ */
+
+/* ---- v2: 多模型类型支持 ----
+ * 整个 Step 2 现在围绕「当前模型类型」转：
+ *   currentModelType  当前选中的 model_type id（"minimind" / "deepseek-r1-1.5b" / ...）
+ *   currentModelCfg   该类型的完整配置（presets、extra_args、family、save_format 等）
+ *   DIFF_PRESETS      会在切换模型类型时动态从 currentModelCfg.presets 重新生成
+ *
+ * family 决定显示哪些组件：
+ *   body.fm-minimind        → 显示「基础模型」下拉
+ *   body.fm-hf_causal_lm    → 显示「LoRA 参数」面板
+ */
+let currentModelType = null;
+let currentModelCfg = null;
+let modelTypeList = [];
+
+// 模型类型 → 各家 UI 文案
+const MT_META = {
+  minimind:           {ic: '🧒', sub: '全参数 SFT · ~700MB 单文件'},
+  'deepseek-r1-1.5b': {ic: '🐳', sub: 'QLoRA 微调 · LoRA 增量~70MB'},
+};
+
+async function loadModelTypes() {
+  const d = await fetch('/api/model_types').then(r => r.json());
+  modelTypeList = d.types || [];
+  const grid = $('modelTypeGrid');
+  grid.innerHTML = '';
+  for (const t of modelTypeList) {
+    const meta = MT_META[t.id] || {ic: '⚙', sub: t.family};
+    const card = document.createElement('div');
+    card.className = 'mt-card' + (t.base_available ? '' : ' disabled');
+    card.dataset.type = t.id;
+    card.innerHTML = `
+      <div class="mt-head">
+        <span class="mt-ic">${meta.ic}</span>
+        <span class="mt-title">${escapeHtml(t.display_name)}</span>
+      </div>
+      <div class="mt-sub">${escapeHtml(meta.sub)}</div>
+      <div class="mt-vram">显存：${escapeHtml(t.vram_hint || '—')}</div>
+      ${t.base_available ? '' : '<div class="mt-warn">⚠️ 基座未下载，先放到对应目录</div>'}
+    `;
+    card.onclick = () => { if (t.base_available) selectModelType(t.id); };
+    grid.appendChild(card);
+  }
+  // 默认选中 server 给的 default
+  if (d.default && modelTypeList.some(t => t.id === d.default && t.base_available)) {
+    await selectModelType(d.default);
+  } else {
+    // 兜底：选第一个可用的
+    const first = modelTypeList.find(t => t.base_available);
+    if (first) await selectModelType(first.id);
+  }
+}
+
+async function selectModelType(typeId) {
+  if (typeId === currentModelType) return;
+  // 拉该类型完整配置
+  let cfg;
+  try {
+    cfg = await fetch('/api/model_type_config?type=' + encodeURIComponent(typeId))
+      .then(r => r.json());
+    if (cfg.error) throw new Error(cfg.error);
+  } catch (e) {
+    alert('加载模型配置失败：' + e.message);
+    return;
+  }
+  currentModelType = typeId;
+  currentModelCfg = cfg;
+
+  // 高亮卡片
+  document.querySelectorAll('#modelTypeGrid .mt-card').forEach(c => {
+    c.classList.toggle('on', c.dataset.type === typeId);
+  });
+
+  // 切换 family 相关组件显示（CSS body.fm-xxx 控制）
+  document.body.classList.remove('fm-minimind', 'fm-hf_causal_lm');
+  document.body.classList.add('fm-' + cfg.family);
+
+  // 用注册表 presets 重写 DIFF_PRESETS，并按当前 difficulty 重新填充表单
+  DIFF_PRESETS = {};
+  for (const lvl of ['quick', 'normal', 'deep']) {
+    const p = cfg.presets[lvl];
+    DIFF_PRESETS[lvl] = {epochs: p.epochs, batch: p.batch_size, lr: String(p.learning_rate)};
+  }
+  applyDifficulty(difficulty);
+  // 更新「难度档位」三张卡的副标题（参数预览）
+  document.querySelectorAll('.diff-card').forEach(card => {
+    const lvl = card.dataset.level;
+    const p = DIFF_PRESETS[lvl];
+    const pe = card.querySelector('.params');
+    if (pe && p) pe.textContent = `epoch=${p.epochs} · batch=${p.batch} · lr=${p.lr}`;
+  });
+
+  // LoRA 默认值 + 基座只读展示
+  if (cfg.family === 'hf_causal_lm') {
+    const ea = cfg.extra_args || {};
+    if (ea.lora_r != null)       $('loraR').value = ea.lora_r;
+    if (ea.lora_alpha != null)   $('loraAlpha').value = ea.lora_alpha;
+    if (ea.lora_dropout != null) $('loraDropout').value = ea.lora_dropout;
+    if (ea.max_seq_len != null)  $('maxSeqLen').value = ea.max_seq_len;
+
+    // 基座只读展示：让用户清楚自己实际在用什么基座
+    $('hfBaseName').textContent = cfg.display_name;
+    const sizeStr = cfg.base_model_size_mb
+      ? (cfg.base_model_size_mb >= 1024
+          ? (cfg.base_model_size_mb / 1024).toFixed(1) + ' GB'
+          : cfg.base_model_size_mb + ' MB')
+      : '—';
+    const metaEl = $('hfBaseMeta');
+    if (cfg.base_available) {
+      metaEl.className = 'meta';
+      metaEl.innerHTML = `📦 ${escapeHtml(cfg.base_model_rel || '')} · ${sizeStr} · 已下载`;
+    } else {
+      metaEl.className = 'meta warn';
+      metaEl.innerHTML = `⚠️ 基座未下载：${escapeHtml(cfg.base_model_rel || '')}`;
+    }
+  }
+
+  // 模型类型提示
+  $('modelTypeHint').textContent = cfg.family === 'hf_causal_lm'
+    ? `已选 ${cfg.display_name} · 训练产物是 LoRA 适配器目录（约 ${cfg.extra_args?.lora_r || 16}×几十MB），推理时会自动与基座合并`
+    : `已选 ${cfg.display_name} · 训练产物是单个 .pth 文件`;
+
+  // MiniMind 路径需要刷新「基础模型」下拉
+  if (cfg.family === 'minimind') loadBaseModels();
+  // HF LoRA 路径需要刷新「续训起点」下拉
+  if (cfg.family === 'hf_causal_lm') loadResumableLoras(typeId);
+}
+
+// v2.2：拉取「可作为续训起点的 LoRA 列表」
+async function loadResumableLoras(typeId) {
+  const sel = $('resumeFromSel');
+  const hint = $('resumeHint');
+  // 清回默认态
+  sel.innerHTML = '<option value="">— 从零开始训练新的 LoRA —</option>';
+  hint.classList.add('empty');
+  hint.textContent = '';
+  applyResumeLock(false);
+
+  let d;
+  try {
+    d = await fetch('/api/resumable_loras?type=' + encodeURIComponent(typeId))
+      .then(r => r.json());
+  } catch (e) { return; }
+  if (!d.items || !d.items.length) return;
+
+  for (const it of d.items) {
+    const opt = document.createElement('option');
+    opt.value = it.name;
+    const sizeStr = it.size_mb >= 1024
+      ? (it.size_mb / 1024).toFixed(1) + ' GB'
+      : it.size_mb + ' MB';
+    // 不兼容（基座不一致）的灰掉
+    if (!it.compatible) {
+      opt.disabled = true;
+      opt.textContent = `${it.name}  (基座不匹配，不可用)`;
+    } else {
+      opt.textContent = `${it.name}  (${sizeStr} · ${it.time})`;
+    }
+    sel.appendChild(opt);
+  }
+}
+
+// 续训起点切换：显示提示条 + 锁/解锁 LoRA 结构参数
+$('resumeFromSel') && ($('resumeFromSel').onchange = function() {
+  const name = this.value.trim();
+  const hint = $('resumeHint');
+  if (!name) {
+    hint.classList.add('empty');
+    hint.textContent = '';
+    applyResumeLock(false);
+    return;
+  }
+  hint.classList.remove('empty');
+  hint.innerHTML = `🔁 将在 <b>${escapeHtml(name)}</b> 的基础上继续训练。`
+    + ` 新模型会保存为独立的产物，<b>不会覆盖</b>原 LoRA。`
+    + ` LoRA 的 rank/alpha/dropout 已被原适配器固定，无法修改。`;
+  applyResumeLock(true);
+});
+
+// 续训时把 LoRA 结构参数（rank/alpha/dropout）灰掉
+function applyResumeLock(locked) {
+  // max_seq_len 是数据预处理参数，续训时仍可改，所以不锁
+  ['loraR', 'loraAlpha', 'loraDropout'].forEach(id => {
+    const el = $(id);
+    if (!el) return;
+    const wrap = el.closest('.form-group');
+    if (!wrap) return;
+    wrap.classList.toggle('lora-locked', locked);
+  });
+}
+
+// 切换难度档位（抽出来给 selectModelType 复用）
+function applyDifficulty(lvl) {
+  const p = DIFF_PRESETS[lvl];
+  if (!p) return;
+  $('epochs').value = p.epochs;
+  $('batchSize').value = p.batch;
+  $('lr').value = p.lr;
+  advTouched = false;
+}
+
 // ---- 数据集 / 基座模型下拉 ----
 async function loadDatasets() {
   const d = await fetch('/api/datasets').then(r => r.json());
@@ -737,10 +1038,13 @@ async function loadDatasets() {
   else if (cur) sel.value = cur;
 }
 async function loadBaseModels() {
+  // 「基础模型」下拉只对 MiniMind 全参数训练有意义，只列 format=pth 且 model_type=minimind 的
   const d = await fetch('/api/models').then(r => r.json());
   const sel = $('baseModelSel');
   sel.innerHTML = '';
-  for (const m of d.models || []) {
+  for (const m of (d.models || [])) {
+    if (m.format !== 'pth') continue;
+    if (m.model_type && m.model_type !== 'minimind') continue;
     const opt = document.createElement('option');
     opt.value = m.name.replace('_768.pth', '').replace('.pth', '');
     opt.textContent = m.name + (m.is_base ? '  [基座]' : '') + `  (${m.size_mb}MB)`;
@@ -752,7 +1056,8 @@ async function loadBaseModels() {
 // ---- 难度档位 ----
 let difficulty = 'normal';
 let advTouched = false;  // 用户是否手动改过高级参数
-const DIFF_PRESETS = {
+// v2：DIFF_PRESETS 不再是常量，由 selectModelType() 从注册表 presets 重写
+let DIFF_PRESETS = {
   quick:  {epochs: 1, batch: 2, lr: '2e-5'},
   normal: {epochs: 3, batch: 2, lr: '2e-5'},
   deep:   {epochs: 8, batch: 2, lr: '1e-5'},
@@ -762,11 +1067,7 @@ document.querySelectorAll('.diff-card').forEach(card => {
     document.querySelectorAll('.diff-card').forEach(c => c.classList.remove('on'));
     card.classList.add('on');
     difficulty = card.dataset.level;
-    advTouched = false;  // 选档位时复位
-    const p = DIFF_PRESETS[difficulty];
-    $('epochs').value = p.epochs;
-    $('batchSize').value = p.batch;
-    $('lr').value = p.lr;
+    applyDifficulty(difficulty);
   };
 });
 // 高级参数被手动改时，记一下
@@ -776,6 +1077,13 @@ $('advToggle').onclick = () => {
   const panel = $('advPanel');
   const open = panel.classList.toggle('on');
   $('advToggle').textContent = (open ? '▾' : '▸') + ' 高级参数（' + (open ? '点击收起' : '点击展开') + '）';
+};
+
+// v2：LoRA 参数面板的展开/收起
+$('loraToggle').onclick = () => {
+  const panel = $('loraPanel');
+  const open = panel.classList.toggle('on');
+  $('loraToggle').textContent = (open ? '▾' : '▸') + ' LoRA 参数（' + (open ? '点击收起' : '点击展开') + '）';
 };
 
 // ---- 开始训练 ----
@@ -810,27 +1118,40 @@ $('btnStart').onclick = async () => {
   const saveName = $('saveName').value.trim();
   if (!dataset) { alert('请先选择训练数据集'); return; }
   if (!saveName) { alert('请填写模型名称'); return; }
+  if (!currentModelType) { alert('请先选择模型类型'); return; }
 
   // 参数来源：默认走档位，但若用户改过高级参数则用高级参数
   const params = advTouched
     ? {epochs: parseInt($('epochs').value), batch_size: parseInt($('batchSize').value), learning_rate: $('lr').value}
     : (() => { const p = DIFF_PRESETS[difficulty]; return {epochs: p.epochs, batch_size: p.batch, learning_rate: p.lr}; })();
 
+  // v2：按 family 拼专属字段
+  const body = {dataset, save_name: saveName, model_type: currentModelType, ...params};
+  if (currentModelCfg?.family === 'minimind') {
+    body.base_model = $('baseModelSel').value;
+  } else if (currentModelCfg?.family === 'hf_causal_lm') {
+    body.lora_r = parseInt($('loraR').value);
+    body.lora_alpha = parseInt($('loraAlpha').value);
+    body.lora_dropout = parseFloat($('loraDropout').value);
+    body.max_seq_len = parseInt($('maxSeqLen').value);
+    // v2.2：续训起点（选了「从零开始」则为空字符串，后端按无续训处理）
+    const resume = $('resumeFromSel').value.trim();
+    if (resume) body.resume_from = resume;
+  }
+
   $('btnStart').disabled = true;
   $('btnStop').disabled = false;
   $('btnGotoStep3').disabled = true;
   $('progressCard').classList.add('on');
   resetProgressUI();
-  setGlobalStatus('running', '训练中…');
+  setGlobalStatus('running', currentModelCfg?.family === 'hf_causal_lm'
+    ? '训练中…（基座首次加载约 5~10 秒）'
+    : '训练中…');
 
   const res = await fetch('/api/start_train', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({
-      dataset, save_name: saveName,
-      base_model: $('baseModelSel').value,
-      ...params,
-    })
+    body: JSON.stringify(body),
   }).then(r => r.json());
 
   if (res.error) {
@@ -942,7 +1263,10 @@ function connectLogWS(taskId, saveName) {
         stepDone[2] = true;
         document.querySelector('.step[data-step="2"]').classList.add('done');
         $('btnGotoStep3').disabled = false;
-        $('trainSummary').textContent = `✅ 训练完成！模型 ${saveName}_768.pth 已就绪，去第 ③ 步聊一句试试 →`;
+        // v2：根据当前模型类型的 save_ext 拼成果名（minimind→_768.pth，deepseek→_lora）
+        const ext = currentModelCfg?.save_ext || '_768.pth';
+        const artifact = saveName + ext;
+        $('trainSummary').textContent = `✅ 训练完成！模型「${artifact}」已就绪，去第 ③ 步聊一句试试 →`;
         $('progPct').textContent = '100%';
         $('progBar').style.width = '100%';
         $('progStage').textContent = '完成 🎉';
@@ -977,6 +1301,13 @@ function connectLogWS(taskId, saveName) {
 /* ============================================================
  * Step 3：测试 + 模型管理
  * ============================================================ */
+// v2：模型类型 → 友好短名（下拉/badge 用）
+const MT_SHORT = {
+  minimind: 'MiniMind',
+  'deepseek-r1-1.5b': 'DeepSeek-1.5B',
+  unknown: '未知',
+};
+
 async function loadTestModels() {
   const d = await fetch('/api/models').then(r => r.json());
   const sel = $('testModelSel');
@@ -989,7 +1320,9 @@ async function loadTestModels() {
   for (const m of list) {
     const opt = document.createElement('option');
     opt.value = m.name;
-    opt.textContent = m.name + (m.is_base ? '  [基座]' : '');
+    const mt = MT_SHORT[m.model_type] || m.model_type || '?';
+    const tag = m.format === 'lora' ? '[LoRA]' : (m.is_base ? '[基座]' : '');
+    opt.textContent = `${m.name}  ${tag} · ${mt}`;
     sel.appendChild(opt);
   }
 }
@@ -1002,16 +1335,28 @@ async function loadModelsTable() {
   }
   let html = '<table><thead><tr><th>模型名</th><th>大小</th><th>类型</th><th>时间</th><th>操作</th></tr></thead><tbody>';
   for (const m of d.models) {
-    const badge = m.is_base
-      ? '<span class="badge badge-base">基座</span>'
-      : '<span class="badge badge-sft">SFT</span>';
+    // 主 badge：base / SFT / LoRA
+    let badge;
+    if (m.is_base) badge = '<span class="badge badge-base">基座</span>';
+    else if (m.format === 'lora') badge = '<span class="badge badge-lora">LoRA</span>';
+    else badge = '<span class="badge badge-sft">SFT</span>';
+    // 次级 badge：模型类型短名
+    const mt = MT_SHORT[m.model_type] || m.model_type || '?';
+    badge += `<span class="badge badge-mt">${escapeHtml(mt)}</span>`;
+
     const op = m.is_base
       ? '<span style="color:var(--mu);font-size:.72rem;font-style:italic">受保护</span>'
       : `<button class="btn small" onclick="selectAndTest('${m.name}')">▶ 测试</button>
          <button class="btn small danger" onclick="deleteModel('${m.name}')">删除</button>`;
+    // LoRA 用「目录」概念展示，size_mb 实际是 adapter 体积
+    const sizeStr = m.format === 'lora' ? `${m.size_mb} MB <span style="color:var(--dim);font-size:.66rem">(adapter)</span>` : `${m.size_mb} MB`;
+    // v2.2：续训血统展示
+    const nameCell = m.resume_from
+      ? `${escapeHtml(m.name)}<div style="color:var(--mu);font-size:.62rem;margin-top:2px">🔁 续训自 ${escapeHtml(m.resume_from)}</div>`
+      : escapeHtml(m.name);
     html += `<tr>
-      <td style="font-family:var(--mono);font-size:.75rem">${escapeHtml(m.name)}</td>
-      <td style="font-family:var(--mono)">${m.size_mb} MB</td>
+      <td style="font-family:var(--mono);font-size:.75rem">${nameCell}</td>
+      <td style="font-family:var(--mono)">${sizeStr}</td>
       <td>${badge}</td>
       <td style="color:var(--mu);font-size:.72rem">${m.time}</td>
       <td>${op}</td>
@@ -1099,7 +1444,8 @@ renderRows();
 refreshDataSummary();
 // 预载 step 2 的下拉，方便用户直接跳过去
 loadDatasets();
-loadBaseModels();
+// v2：加载模型类型列表（会自动 selectModelType → 触发 loadBaseModels 等）
+loadModelTypes();
 </script>
 </body>
 </html>

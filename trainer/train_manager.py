@@ -1,12 +1,26 @@
 """
 训练进程管理器
-- 通过 subprocess 拉起 train_text_sft.py
+- 通过 subprocess 拉起训练脚本（按 model_type 分发到不同脚本）
 - 后台线程逐行读取 stdout
 - 支持多个训练任务（MVP 限制同时只跑一个）
 - 提供 logs 列表 + 事件通知，供 WebSocket 推送
+
+v2 改造（2026-05-18）：
+  * 从 model_registry 取训练脚本 + 基座路径，不再硬编码 train_text_sft.py
+  * 不同模型类型走不同 cmd 拼装（MiniMind 用 --base_model xxx.pth，
+    DeepSeek 用 --model_path xxx/）
+  * 子进程环境加 PYTHONUTF8=1，否则 trl 1.x 在 Windows 上 import 会因
+    GBK 解码 emoji 失败而崩溃
 """
 
 import subprocess, sys, threading, time, os, uuid
+
+from trainer.model_registry import (
+    MODEL_REGISTRY,
+    DEFAULT_MODEL_TYPE,
+    get_config,
+    build_save_path,
+)
 
 
 # ── 错误信息翻译表 ──
@@ -53,10 +67,12 @@ def translate_error(text: str) -> str | None:
 class TrainTask:
     """单个训练任务的状态容器"""
 
-    def __init__(self, task_id: str, proc: subprocess.Popen, save_name: str):
+    def __init__(self, task_id: str, proc: subprocess.Popen, save_name: str,
+                 model_type: str = DEFAULT_MODEL_TYPE):
         self.task_id = task_id
         self.proc = proc
         self.save_name = save_name
+        self.model_type = model_type  # v2 新增：方便前端按类型展示
         self.status = "running"       # running / done / failed / stopped
         self.logs: list[str] = []     # 所有日志行
         self.log_event = threading.Event()  # 有新日志时 set
@@ -71,6 +87,7 @@ class TrainTask:
         return {
             "task_id": self.task_id,
             "save_name": self.save_name,
+            "model_type": self.model_type,
             "status": self.status,
             "elapsed": round(self.elapsed, 1),
         }
@@ -89,7 +106,10 @@ class TrainManager:
         params 必须包含:
           data_path, epochs, batch_size, learning_rate, save_name
         可选:
-          base_model, max_seq_len, dtype, device
+          model_type   - "minimind" / "deepseek-r1-1.5b" / ...（默认 minimind）
+          base_model   - 仅 MiniMind 用，指向 .pth 文件路径
+          max_seq_len, dtype, device, accumulation_steps
+          lora_r, lora_alpha, lora_dropout, no_4bit   - 仅 LoRA 类训练用
         返回 task_id
         """
         with self._lock:
@@ -100,35 +120,64 @@ class TrainManager:
 
         task_id = uuid.uuid4().hex[:8]
         save_name = params["save_name"]
+        model_type = params.get("model_type") or DEFAULT_MODEL_TYPE
+        cfg = get_config(model_type)   # 不存在直接抛 KeyError → 上层转 400
 
         # 项目根目录 = train_manager.py 的上上级
         root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        save_dir = params.get("save_dir") or os.path.join(root, "out")
 
-        # sys.executable 保证使用的是当前 Python 解释器（不再硬编码 "python"）
-        # -u 保证 stdout 无缓冲，日志可实时推送
+        # ── 按模型类型分发 cmd ──
+        # 公共参数 + 脚本路径来自注册表，避免硬编码
         cmd = [
-            sys.executable, "-u", "trainer/train_text_sft.py",
+            sys.executable, "-u", cfg["train_script"],
             "--data_path", params["data_path"],
             "--epochs", str(params["epochs"]),
             "--batch_size", str(params["batch_size"]),
             "--learning_rate", str(params["learning_rate"]),
             "--save_name", save_name,
-            "--save_dir", params.get("save_dir", os.path.join(root, "out")),
-            "--tokenizer_path", os.path.join(root, "model"),
+            "--save_dir", save_dir,
         ]
 
-        if params.get("base_model"):
-            cmd += ["--base_model", params["base_model"]]
-        if params.get("max_seq_len"):
-            cmd += ["--max_seq_len", str(params["max_seq_len"])]
-        if params.get("dtype"):
-            cmd += ["--dtype", params["dtype"]]
-        if params.get("device"):
-            cmd += ["--device", params["device"]]
+        if cfg["family"] == "minimind":
+            # MiniMind：传 tokenizer_path 和 --base_model（.pth 单文件）
+            cmd += ["--tokenizer_path", cfg["tokenizer_path"]]
+            base_model = params.get("base_model") or cfg["base_model_path"]
+            cmd += ["--base_model", base_model]
+            if params.get("max_seq_len"):
+                cmd += ["--max_seq_len", str(params["max_seq_len"])]
+            if params.get("dtype"):
+                cmd += ["--dtype", params["dtype"]]
+            if params.get("device"):
+                cmd += ["--device", params["device"]]
+
+        elif cfg["family"] == "hf_causal_lm":
+            # DeepSeek/Qwen 等 HF 因果模型：传 --model_path（HF 目录）+ LoRA 参数
+            # ⚠️ 这里**不能**用 MiniMind 那套 `f"{base_model}_768.pth"` 拼接
+            cmd += ["--model_path", cfg["base_model_path"]]
+            # 把注册表里的默认 LoRA 参数和用户覆盖合并，用户优先
+            extras = {**cfg.get("extra_args", {}), **{k: params[k] for k in
+                      ("lora_r", "lora_alpha", "lora_dropout", "max_seq_len",
+                       "accumulation_steps", "dtype", "device")
+                      if k in params}}
+            for k, v in extras.items():
+                cmd += [f"--{k}", str(v)]
+            if params.get("no_4bit"):
+                cmd += ["--no_4bit"]
+            # v2.2：续训从某个已有 LoRA 接力
+            if params.get("resume_from_lora"):
+                cmd += ["--resume_from_lora", params["resume_from_lora"]]
+
+        else:
+            raise ValueError(f"未知 model family: {cfg['family']!r}")
 
         # Windows 上 Python 默认 stdout 编码是 GBK，训练脚本里有 emoji（📝🚀✅ 等）
         # 一旦 print 就会触发 UnicodeEncodeError。这里强制子进程 stdout 用 UTF-8，
         # 并用 errors='replace' 兜底，保证父子进程都不会因为非法字节挂掉。
+        #
+        # PYTHONUTF8=1 是给 trl 1.x 用的：trl 1.4.0 自己的 .py 源文件里含 emoji
+        # 但没声明 # coding: utf-8，Windows 默认 GBK 读源码会让 import trl 直接
+        # 挂掉。开了 UTF-8 模式之后 Python 会用 UTF-8 读源码。
         proc = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
@@ -141,11 +190,12 @@ class TrainManager:
             env={
                 **os.environ,
                 "PYTHONUNBUFFERED": "1",
-                "PYTHONIOENCODING": "utf-8",  # ← 关键：让子进程 print emoji 不再崩
+                "PYTHONIOENCODING": "utf-8",   # ← print emoji 不再崩
+                "PYTHONUTF8": "1",             # ← import trl 不再崩（v2 新增）
             },
         )
 
-        task = TrainTask(task_id, proc, save_name)
+        task = TrainTask(task_id, proc, save_name, model_type=model_type)
         self.tasks[task_id] = task
 
         # 后台线程读取 stdout
